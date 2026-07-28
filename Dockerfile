@@ -14,7 +14,8 @@ RUN python -m spacy download es_core_news_sm
 COPY . .
 
 RUN mkdir -p data/generated data/real models
+RUN chmod +x entrypoint.sh
 
 EXPOSE 8006
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8006"]
+CMD ["./entrypoint.sh"]
