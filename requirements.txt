@@ -14,7 +14,8 @@ joblib==1.4.2
 
 # NLP
 transformers==4.41.2
-torch==2.3.1
+# torch se instala por separado en el Dockerfile (build CPU-only, mucho
+# más liviana que la que trae PyPI por defecto con soporte CUDA)
 spacy==3.7.5
 sentencepiece==0.2.0
 bertopic==0.16.3
