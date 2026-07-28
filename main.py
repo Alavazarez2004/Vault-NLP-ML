@@ -17,10 +17,24 @@ from src.infrastructure.routes import (
     nlp_routes,
     training_routes,
 )
+from src.application.use_cases.nlp.analyze_sentiment import _get_pipeline as _get_sentiment_pipeline
+from src.application.use_cases.nlp.detect_toxicity import _get_pipeline as _get_toxicity_pipeline
+from src.application.use_cases.nlp.detect_entities import _get_nlp as _get_spacy_nlp
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Precarga de modelos pesados (transformers + spaCy) ANTES de aceptar
+    # tráfico. Sin esto, la primera petición real a /nlp/analyze paga el
+    # costo de descargar/cargar los modelos y puede exceder el timeout del
+    # cliente o hacer que el contenedor supere su límite de memoria justo
+    # cuando ya está bajo carga.
+    print("Precargando modelos de NLP (sentimiento, toxicidad, spaCy)...")
+    _get_sentiment_pipeline()
+    _get_toxicity_pipeline()
+    _get_spacy_nlp()
+    print("Modelos de NLP listos.")
+
     consumer = RabbitMQConsumer(get_process_content_event(), get_process_user_event())
     await consumer.start()
 
