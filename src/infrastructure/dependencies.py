@@ -100,7 +100,10 @@ def get_catalog_repository() -> StaticCatalogRepository:
 
 @lru_cache
 def get_user_collection_repository() -> PostgresUserCollectionRepository:
-    return PostgresUserCollectionRepository()
+    return PostgresUserCollectionRepository(
+        catalog_repository=get_catalog_repository(),
+        segment_user=get_segment_user(),
+    )
 
 
 def get_recommend_items_controller() -> RecommendItemsController:
