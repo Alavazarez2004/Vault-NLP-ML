@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -35,8 +36,14 @@ async def lifespan(app: FastAPI):
     _get_spacy_nlp()
     print("Modelos de NLP listos.")
 
+    # En background, no "await" directo: si RabbitMQ no responde (URL mal
+    # puesta, broker caído), esto no debe tumbar el health check ni los
+    # endpoints de NLP/ML por HTTP, que no dependen de RabbitMQ para nada.
+    # Antes, un RABBITMQ_URL incorrecto colgaba el lifespan para siempre
+    # (connect_robust reintenta sin límite) y Railway reiniciaba el
+    # contenedor en loop infinito sin ningún error visible.
     consumer = RabbitMQConsumer(get_process_content_event(), get_process_user_event())
-    await consumer.start()
+    consumer_task = asyncio.create_task(consumer.start())
 
     scheduler = AsyncIOScheduler()
     nightly_retrain = get_nightly_retrain_use_case()
@@ -51,6 +58,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    consumer_task.cancel()
     await consumer.stop()
     scheduler.shutdown()
 

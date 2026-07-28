@@ -30,8 +30,31 @@ class RabbitMQConsumer:
         self._process_user_event = process_user_event
         self._connection: aio_pika.abc.AbstractRobustConnection | None = None
 
+    # connect_robust reintenta la conexión inicial indefinidamente si el
+    # broker no responde (es justo lo que significa "robust") -- sin este
+    # timeout, un RABBITMQ_URL mal puesto o el broker caído cuelga el
+    # startup para siempre. Ver también main.py: start() ahora corre en
+    # background, así que esto ya no bloquea el arranque de la app, pero
+    # igual necesita un límite para no quedarse reintentando en silencio
+    # por horas sin que nadie se entere.
+    CONNECT_TIMEOUT_SECONDS = 15
+
     async def start(self) -> None:
-        self._connection = await aio_pika.connect_robust(settings.rabbitmq_url)
+        try:
+            self._connection = await asyncio.wait_for(
+                aio_pika.connect_robust(settings.rabbitmq_url),
+                timeout=self.CONNECT_TIMEOUT_SECONDS,
+            )
+        except Exception:
+            logger.exception(
+                "No se pudo conectar a RabbitMQ en %ss -- revisa RABBITMQ_URL. "
+                "El servicio sigue arriba para NLP/ML por HTTP, pero no va a "
+                "reaccionar a eventos (post.created, asset.updated, etc.) "
+                "hasta el próximo reinicio con la conexión correcta.",
+                self.CONNECT_TIMEOUT_SECONDS,
+            )
+            return
+
         channel = await self._connection.channel()
         await channel.set_qos(prefetch_count=1)
 
