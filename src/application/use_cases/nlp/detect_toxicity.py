@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+import torch
 from transformers import pipeline
 
 TOXICITY_MODEL_NAME = "pysentimiento/robertuito-hate-speech"
@@ -12,6 +13,7 @@ def _get_pipeline():
         "text-classification",
         model=TOXICITY_MODEL_NAME,
         top_k=None,
+        torch_dtype=torch.float16,
     )
 
 

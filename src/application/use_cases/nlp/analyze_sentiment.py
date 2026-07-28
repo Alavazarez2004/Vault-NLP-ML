@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+import torch
 from transformers import pipeline
 
 SENTIMENT_MODEL_NAME = "pysentimiento/robertuito-sentiment-analysis"
@@ -13,7 +14,15 @@ LABEL_MAP = {
 
 @lru_cache
 def _get_pipeline():
-    return pipeline("text-classification", model=SENTIMENT_MODEL_NAME)
+    # torch_dtype=float16 reduce a la mitad la memoria que ocupa el modelo
+    # respecto a float32 (default). En CPU la inferencia es un poco más
+    # lenta que en float32 puro, pero es necesario para caber en el límite
+    # de memoria del plan (1 GB).
+    return pipeline(
+        "text-classification",
+        model=SENTIMENT_MODEL_NAME,
+        torch_dtype=torch.float16,
+    )
 
 
 class AnalyzeSentiment:
