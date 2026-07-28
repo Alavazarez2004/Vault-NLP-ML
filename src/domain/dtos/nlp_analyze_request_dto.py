@@ -7,4 +7,4 @@ from pydantic import BaseModel
 class NLPAnalyzeRequestDTO(BaseModel):
     text: str
     source_id: UUID
-    source_type: Literal["post", "comment", "review"]
+    source_type: Literal["post", "comment", "review", "asset_comment"]
