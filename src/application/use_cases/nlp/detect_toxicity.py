@@ -34,7 +34,7 @@ BAD_WORDS = {
     # Chile
     "weón", "weon", "weona", "aweonao", "conchesumadre", "ctm"
 }
-TOXICITY_THRESHOLD = 0.50
+TOXICITY_THRESHOLD = 0.40
 
 
 @lru_cache
