@@ -8,5 +8,6 @@ class NLPAnalyzeResponseDTO(BaseModel):
     sentiment_label: str
     toxicity_score: float
     is_toxic: bool
+    toxicity_reason: str | None = None
     entities: list[EntityDTO]
     topics: list[str]
