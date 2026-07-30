@@ -31,6 +31,14 @@ class AnalyzeText:
         toxicity_score, is_toxic, toxicity_reason = self._detect_toxicity.execute(request.text)
         entities = self._detect_entities.execute(request.text)
         topics = self._model_topics.execute(request.text)
+        
+        print(
+            {
+            "toxicity_score": toxicity_score,
+            "is_toxic": is_toxic,
+            "toxicity_reason": toxicity_reason,
+            }
+        )
 
         return NLPAnalyzeResponseDTO(
             sentiment_score=sentiment_score,
