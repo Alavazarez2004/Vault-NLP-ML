@@ -42,15 +42,28 @@ class RecommendCatalogItems:
         similarity = self._similarity_builder.execute(catalog)
         user_items = self._user_collection_repository.get_collection(user_id)
 
-        recommendations = self._by_content(catalog, similarity, user_items, top_n)
+        content_limit = max(1, top_n // 2)
+        cluster_limit = top_n - content_limit
+
+        content_recommendations = self._by_content(
+            catalog,
+            similarity,
+            user_items,
+            content_limit
+        )
 
         segment_result = self._segment_user.execute(user_id, persist=False)
         cluster_collections = self._user_collection_repository.get_collections_by_cluster(
             segment_result.cluster_id
         )
-        recommendations += self._by_cluster(catalog, user_items, cluster_collections, top_n)
+        cluster_recommendations = self._by_cluster(
+            catalog,
+            user_items,
+            cluster_collections,
+            cluster_limit
+        )
 
-        return recommendations
+        return content_recommendations + cluster_recommendations
 
     @staticmethod
     def _by_content(
