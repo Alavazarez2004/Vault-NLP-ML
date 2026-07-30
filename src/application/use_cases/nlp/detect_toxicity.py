@@ -28,5 +28,6 @@ class DetectToxicity:
 
     def execute(self, text: str) -> tuple[float, bool]:
         scores = _get_pipeline()(text, truncation=True)[0]
+        print(scores)
         toxicity_score = round(max(s["score"] for s in scores), 4)
         return toxicity_score, toxicity_score >= TOXICITY_THRESHOLD
