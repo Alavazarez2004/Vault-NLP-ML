@@ -32,7 +32,7 @@ BAD_WORDS = {
     # Chile
     "weón", "weon", "weona", "aweonao", "conchesumadre", "ctm"
 }
-TOXICITY_THRESHOLD = 0.40
+TOXICITY_THRESHOLD = 0.70
 
 
 @lru_cache
@@ -56,8 +56,16 @@ class DetectToxicity:
 
     def execute(self, text: str) -> tuple[float, bool]:
         scores = _get_pipeline()(text, truncation=True)[0]
+        print(scores)
 
-        toxicity_score = round(max(s["score"] for s in scores), 4)
+        toxicity_score = round(
+            max(
+                s["score"] 
+                for s in scores 
+                if s["label"].lower() in ["hateful", "aggressive", "targeted"]
+            ),
+            4
+        )
 
         is_toxic = toxicity_score >= TOXICITY_THRESHOLD
 
@@ -70,6 +78,12 @@ class DetectToxicity:
 
         if contains_bad_word:
             is_toxic = True
+            
+        elif toxicity_score >= 0.70:
+            is_toxic = True
+
+        else:
+            is_toxic = False
             
         print({
             "toxicity_score": toxicity_score,
