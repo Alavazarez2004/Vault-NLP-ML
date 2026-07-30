@@ -28,24 +28,15 @@ class AnalyzeText:
 
     def execute(self, request: NLPAnalyzeRequestDTO) -> NLPAnalyzeResponseDTO:
         sentiment_score, sentiment_label = self._analyze_sentiment.execute(request.text)
-        toxicity_score, is_toxic, toxicity_reason = self._detect_toxicity.execute(request.text)
+        toxicity_score, is_toxic = self._detect_toxicity.execute(request.text)
         entities = self._detect_entities.execute(request.text)
         topics = self._model_topics.execute(request.text)
-        
-        print(
-            {
-            "toxicity_score": toxicity_score,
-            "is_toxic": is_toxic,
-            "toxicity_reason": toxicity_reason,
-            }
-        )
 
         return NLPAnalyzeResponseDTO(
             sentiment_score=sentiment_score,
             sentiment_label=sentiment_label,
             toxicity_score=toxicity_score,
             is_toxic=is_toxic,
-            toxicity_reason=toxicity_reason,
             entities=entities,
             topics=topics,
         )
