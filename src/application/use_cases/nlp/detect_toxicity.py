@@ -1,7 +1,5 @@
 from functools import lru_cache
 
-import re
-
 import torch
 from transformers import pipeline
 
@@ -66,7 +64,7 @@ class DetectToxicity:
         text_lower = text.lower()
 
         contains_bad_word = any(
-            re.search(rf"\b{re.escape(word)}\b", text_lower)
+            word in text_lower
             for word in BAD_WORDS
         )
 
