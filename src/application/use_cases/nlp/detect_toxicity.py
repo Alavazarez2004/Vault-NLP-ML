@@ -1,27 +1,38 @@
 from functools import lru_cache
 
+import re
+
 import torch
 from transformers import pipeline
 
 TOXICITY_MODEL_NAME = "pysentimiento/robertuito-hate-speech"
 BAD_WORDS = {
-    "idiota",
-    "imbécil",
-    "imbecil",
-    "pendejo",
-    "estúpido",
-    "estupido",
-    "cabrón",
-    "cabron",
-    "puta",
-    "mierda",
-    "pinche",
-    "pinches",
-    "chingada",
-    "chingar",
-    "verga",
-    "culero",
-    "jodido"
+    # Lista previa
+    "idiota", "tonto", "tonta", "imbécil", "imbecil", "pendejo", "pendeja", "estúpido", "estupido",
+    "cabrón", "cabron", "puta", "mierda", "pinche", "pinches", "chingada", 
+    "chingar", "verga", "culero", "culera", "jodido", "jodida",
+
+    # Insultos generales y obscenidades comunes
+    "bastardo", "bastarda", "perra", "zorra", "carajo", "cagar", "cagada", 
+    "cagón", "cagon", "cagona", "mamada", "mamón", "mamon", "mamona", 
+    "baboso", "babosa", "tarado", "tarada", "mierdoso", "mierdosa",
+
+    # México y Centroamérica
+    "chingadera", "ojete", "putazo", "encabronar", "desmadre", "mamar",
+
+    # Argentina / Uruguay
+    "boludo", "boluda", "pelotudo", "pelotuda", "concha", "conchudo", 
+    "conchuda", "sorete", "forro", "forra", "pajero", "pajera",
+
+    # España
+    "gilipollas", "capullo", "capulla", "hostia", "ostia", "joder", "coño", "cono",
+
+    # Colombia / Venezuela / Caribe
+    "hijueputa", "hdp", "hp", "malparido", "malparida", "gonorrea", 
+    "huevón", "huevon", "huevona", "mamawebo", "mamaguevo",
+
+    # Chile
+    "weón", "weon", "weona", "aweonao", "conchesumadre", "ctm"
 }
 TOXICITY_THRESHOLD = 0.40
 
@@ -55,7 +66,7 @@ class DetectToxicity:
         text_lower = text.lower()
 
         contains_bad_word = any(
-            word in text_lower
+            re.search(rf"\b{re.escape(word)}\b", text_lower)
             for word in BAD_WORDS
         )
 
