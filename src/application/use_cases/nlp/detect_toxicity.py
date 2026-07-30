@@ -1,49 +1,31 @@
 from functools import lru_cache
+import torch
 from transformers import pipeline
 
-MODEL_NAME = "citizenlab/distilbert-base-multilingual-cased-toxicity"
-TOXICITY_THRESHOLD = 0.50
+HATE_MODEL = "pysentimiento/robertuito-hate-speech"
+SENTIMENT_MODEL = "pysentimiento/robertuito-sentiment-analysis"
 
-
-# Mantenemos la función en caché para evitar volver a cargar el modelo en cada request
 @lru_cache
-def _get_pipeline():
-    print("Cargando modelo de IA ligero (DistilBERT)...")
-    return pipeline("text-classification", model=MODEL_NAME)
+def _get_hate_pipeline():
+    return pipeline("text-classification", model=HATE_MODEL, top_k=None, torch_dtype=torch.float16)
 
+@lru_cache
+def _get_sentiment_pipeline():
+    return pipeline("text-classification", model=SENTIMENT_MODEL, top_k=None, torch_dtype=torch.float16)
 
 class DetectToxicity:
-    """
-    Detecta toxicidad y amenazas de forma 100% semántica mediante Inteligencia Artificial.
-    Utiliza un modelo DistilBERT multilingüe optimizado para no exceder la RAM de Railway.
-    """
-
     def execute(self, text: str) -> tuple[float, bool]:
-        try:
-            classifier = _get_pipeline()
-            predictions = classifier(text)
+        # 1. Evaluar Odio/Agresividad
+        hate_scores = _get_hate_pipeline()(text, truncation=True)[0]
+        hate_score = max(
+            s["score"] for s in hate_scores if s["label"].lower() in ["hateful", "aggressive", "targeted"]
+        )
 
-            # Estructura devuelta: [{'label': 'toxic' | 'not_toxic', 'score': 0.98}]
-            result = predictions[0]
-            label = result.get("label", "").lower()
-            score = float(result.get("score", 0.0))
+        # 2. Evaluar Sentimiento
+        sentiment_scores = _get_sentiment_pipeline()(text, truncation=True)[0]
+        neg_score = next(s["score"] for s in sentiment_scores if s["label"].upper() == "NEG")
 
-            # Calcular puntaje de toxicidad
-            if label == "toxic":
-                toxicity_score = round(score, 4)
-            else:
-                toxicity_score = round(1.0 - score, 4)
+        # Es tóxico si el modelo de odio salta (> 0.40) O si el sentimiento es fuertemente negativo (> 0.85)
+        is_toxic = (hate_score >= 0.40) or (neg_score >= 0.85)
 
-        except Exception as e:
-            print(f"Error en la evaluación de la IA: {e}")
-            toxicity_score = 0.0
-
-        is_toxic = toxicity_score >= TOXICITY_THRESHOLD
-
-        print({
-            "toxicity_score": toxicity_score,
-            "is_toxic": is_toxic,
-            "text": text,
-        })
-
-        return toxicity_score, is_toxic
+        return max(hate_score, neg_score), is_toxic
