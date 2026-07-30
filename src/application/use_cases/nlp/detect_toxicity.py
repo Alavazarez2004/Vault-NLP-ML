@@ -19,6 +19,7 @@ def _get_pipeline():
         torch_dtype=torch.float16,
     )
 
+
 class DetectToxicity:
     """
     Use case: detecta discurso de odio/agresividad en un texto en
@@ -37,6 +38,7 @@ class DetectToxicity:
         reason = None
         toxicity_score = 0.0
 
+
         for item in scores:
 
             label = item["label"]
@@ -44,6 +46,7 @@ class DetectToxicity:
 
             # Guardamos el score más alto
             toxicity_score = max(toxicity_score, score)
+
 
             # Revisamos si supera el límite de esa categoría
             if label in TOXICITY_THRESHOLDS:
@@ -53,10 +56,12 @@ class DetectToxicity:
                     toxic = True
                     reason = label
 
+
+
         return {
-            "toxicity_score": round(toxicity_score, 4),
-            "toxic": toxic,
-            "allowed": not toxic,
-            "reason": reason,
-            "details": scores
-        }
+        "toxicity_score": round(toxicity_score, 4),
+        "toxic": toxic,
+        "allowed": not toxic,
+        "reason": reason,
+        "details": scores
+    }
