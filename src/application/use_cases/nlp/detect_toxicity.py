@@ -1,94 +1,78 @@
 from functools import lru_cache
-
 import re
-
 import torch
 from transformers import pipeline
 
-TOXICITY_MODEL_NAME = "pysentimiento/robertuito-hate-speech"
+ZERO_SHOT_MODEL = "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
+TOXICITY_THRESHOLD = 0.50
+
+# Definimos las intenciones que queremos detectar
+CANDIDATE_LABELS = [
+    "una amenaza de violencia",
+    "un insulto o discurso de odio",
+    "un saludo o mensaje inofensivo",
+]
+
+# Diccionario de respaldo rápido (opcional, para cortocircuitar respuestas obvias)
 BAD_WORDS = {
-    # Lista previa
-    "idiota", "tonto", "tonta", "imbécil", "imbecil", "pendejo", "pendeja", "estúpido", "estupido",
-    "cabrón", "cabron", "puta", "mierda", "pinche", "pinches", "chingada", 
-    "chingar", "verga", "culero", "culera", "jodido", "jodida",
-
-    # Insultos generales y obscenidades comunes
-    "bastardo", "bastarda", "perra", "zorra", "carajo", "cagar", "cagada", 
-    "cagón", "cagon", "cagona", "mamada", "mamón", "mamon", "mamona", 
-    "baboso", "babosa", "tarado", "tarada", "mierdoso", "mierdosa",
-
-    # México y Centroamérica
-    "chingadera", "ojete", "putazo", "encabronar", "desmadre", "mamar",
-
-    # Argentina / Uruguay
-    "boludo", "boluda", "pelotudo", "pelotuda", "concha", "conchudo", 
-    "conchuda", "sorete", "forro", "forra", "pajero", "pajera",
-
-    # España
-    "gilipollas", "capullo", "capulla", "hostia", "ostia", "joder", "coño", "cono",
-
-    # Colombia / Venezuela / Caribe
-    "hijueputa", "hdp", "hp", "malparido", "malparida", "gonorrea", 
-    "huevón", "huevon", "huevona", "mamawebo", "mamaguevo",
-
-    # Chile
-    "weón", "weon", "weona", "aweonao", "conchesumadre", "ctm"
+    "idiota", "imbécil", "pendejo", "estúpido", "cabrón", "puta", "mierda",
+    "hijueputa", "gonorrea", "gilipollas", "boludo", "weón"
 }
-TOXICITY_THRESHOLD = 0.40
+FORBIDDEN_PATTERN = re.compile(
+    r"\b(" + "|".join(re.escape(word) for word in BAD_WORDS) + r")\b", 
+    re.IGNORECASE
+)
 
 
 @lru_cache
-def _get_pipeline():
+def _get_zero_shot_pipeline():
+    device = 0 if torch.cuda.is_available() else -1
     return pipeline(
-        "text-classification",
-        model=TOXICITY_MODEL_NAME,
-        top_k=None,
-        torch_dtype=torch.float16,
+        "zero-shot-classification",
+        model=ZERO_SHOT_MODEL,
+        device=device,
+        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32,
     )
 
 
 class DetectToxicity:
     """
-    Use case: detecta discurso de odio/agresividad en un texto en
-    español, usado para filtrar comentarios y posts de la comunidad.
-    Responsabilidad única: toxicidad. El modelo es multi-etiqueta
-    (hateful, aggressive, targeted); se usa el score máximo entre las
-    tres como toxicity_score.
+    Detecta toxicidad, amenazas e insultos utilizando clasificación Zero-Shot.
+    Permite capturar intenciones como "te voy a matar" o "vas a sufrir" 
+    sin necesidad de clasificadores especializados en violencia física.
     """
 
     def execute(self, text: str) -> tuple[float, bool]:
-        scores = _get_pipeline()(text, truncation=True)[0]
-        print(scores)
+        # 1. Chequeo veloz por lista de palabras prohibidas (Oopcional para ahorrarse la GPU)
+        contains_bad_word = bool(FORBIDDEN_PATTERN.search(text))
 
-        toxicity_score = round(
-            max(
-                s["score"] 
-                for s in scores 
-                if s["label"].lower() in ["hateful", "aggressive", "targeted"]
-            ),
-            4
+        # 2. Inferencia Zero-Shot
+        classifier = _get_zero_shot_pipeline()
+        
+        # hypothesis_template estructura la premisa para el modelo MNLI
+        result = classifier(
+            text,
+            candidate_labels=CANDIDATE_LABELS,
+            hypothesis_template="Este texto contiene {}.",
+            multi_label=True  # Permite que un texto sea tanto insulto como amenaza
         )
 
-        is_toxic = toxicity_score >= TOXICITY_THRESHOLD
+        # Mapeamos los scores a sus etiquetas
+        label_scores = dict(zip(result["labels"], result["scores"]))
 
-        text_lower = text.lower()
+        threat_score = label_scores.get("una amenaza de violencia", 0.0)
+        hate_score = label_scores.get("un insulto o discurso de odio", 0.0)
 
-        contains_bad_word = any(
-            re.search(rf"\b{word}\b", text_lower)
-            for word in BAD_WORDS
-        )
+        # Tomamos el valor máximo entre las categorías nocivas
+        toxicity_score = round(max(threat_score, hate_score), 4)
 
-        if contains_bad_word:
-            is_toxic = True
+        # Determinación final
+        is_toxic = contains_bad_word or (toxicity_score >= TOXICITY_THRESHOLD)
 
-        elif toxicity_score >= TOXICITY_THRESHOLD:
-            is_toxic = True
-
-        else:
-            is_toxic = False
-            
         print({
             "toxicity_score": toxicity_score,
+            "threat_score": round(threat_score, 4),
+            "hate_score": round(hate_score, 4),
             "contains_bad_word": contains_bad_word,
             "is_toxic": is_toxic,
             "text": text,
