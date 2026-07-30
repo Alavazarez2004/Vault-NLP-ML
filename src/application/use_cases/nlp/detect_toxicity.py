@@ -1,5 +1,7 @@
 from functools import lru_cache
 
+import re
+
 import torch
 from transformers import pipeline
 
@@ -32,7 +34,7 @@ BAD_WORDS = {
     # Chile
     "weón", "weon", "weona", "aweonao", "conchesumadre", "ctm"
 }
-TOXICITY_THRESHOLD = 0.70
+TOXICITY_THRESHOLD = 0.90
 
 
 @lru_cache
@@ -72,14 +74,14 @@ class DetectToxicity:
         text_lower = text.lower()
 
         contains_bad_word = any(
-            word in text_lower
+            re.search(rf"\b{word}\b", text_lower)
             for word in BAD_WORDS
         )
 
         if contains_bad_word:
             is_toxic = True
-            
-        elif toxicity_score >= 0.70:
+
+        elif toxicity_score >= TOXICITY_THRESHOLD:
             is_toxic = True
 
         else:
