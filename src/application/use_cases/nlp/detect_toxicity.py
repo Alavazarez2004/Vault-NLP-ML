@@ -4,8 +4,11 @@ import torch
 from transformers import pipeline
 
 TOXICITY_MODEL_NAME = "pysentimiento/robertuito-hate-speech"
-TOXICITY_THRESHOLD = 0.5
-
+TOXICITY_THRESHOLDS = {
+    "hateful": 0.70,
+    "aggressive": 0.65,
+    "targeted": 0.60
+}
 
 @lru_cache
 def _get_pipeline():
@@ -16,7 +19,6 @@ def _get_pipeline():
         torch_dtype=torch.float16,
     )
 
-
 class DetectToxicity:
     """
     Use case: detecta discurso de odio/agresividad en un texto en
@@ -26,8 +28,35 @@ class DetectToxicity:
     tres como toxicity_score.
     """
 
-    def execute(self, text: str) -> tuple[float, bool]:
+    def execute(self, text: str) -> dict:
         scores = _get_pipeline()(text, truncation=True)[0]
+
         print(scores)
-        toxicity_score = round(max(s["score"] for s in scores), 4)
-        return toxicity_score, toxicity_score >= TOXICITY_THRESHOLD
+
+        toxic = False
+        reason = None
+        toxicity_score = 0.0
+
+        for item in scores:
+
+            label = item["label"]
+            score = item["score"]
+
+            # Guardamos el score más alto
+            toxicity_score = max(toxicity_score, score)
+
+            # Revisamos si supera el límite de esa categoría
+            if label in TOXICITY_THRESHOLDS:
+
+                if score >= TOXICITY_THRESHOLDS[label]:
+
+                    toxic = True
+                    reason = label
+
+        return {
+            "toxicity_score": round(toxicity_score, 4),
+            "toxic": toxic,
+            "allowed": not toxic,
+            "reason": reason,
+            "details": scores
+        }
