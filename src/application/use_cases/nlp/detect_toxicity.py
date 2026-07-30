@@ -58,7 +58,14 @@ class DetectToxicity:
         scores = _get_pipeline()(text, truncation=True)[0]
         print(scores)
 
-        toxicity_score = round(max(s["score"] for s in scores), 4)
+        toxicity_score = round(
+            max(
+                s["score"] 
+                for s in scores 
+                if s["label"].lower() in ["hateful", "aggressive", "targeted"]
+            ),
+            4
+        )
 
         is_toxic = toxicity_score >= TOXICITY_THRESHOLD
 
