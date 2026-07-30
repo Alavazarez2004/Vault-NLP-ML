@@ -25,7 +25,7 @@ FORBIDDEN_PATTERN = re.compile(
 
 
 @lru_cache
-def _get_zero_shot_pipeline():
+def _get_pipeline():
     device = 0 if torch.cuda.is_available() else -1
     return pipeline(
         "zero-shot-classification",
@@ -47,7 +47,7 @@ class DetectToxicity:
         contains_bad_word = bool(FORBIDDEN_PATTERN.search(text))
 
         # 2. Inferencia Zero-Shot
-        classifier = _get_zero_shot_pipeline()
+        classifier = _get_pipeline()
         
         # hypothesis_template estructura la premisa para el modelo MNLI
         result = classifier(
