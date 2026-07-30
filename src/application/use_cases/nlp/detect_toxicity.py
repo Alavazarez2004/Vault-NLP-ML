@@ -4,7 +4,26 @@ import torch
 from transformers import pipeline
 
 TOXICITY_MODEL_NAME = "pysentimiento/robertuito-hate-speech"
-TOXICITY_THRESHOLD = 0.5
+BAD_WORDS = {
+    "idiota",
+    "imbécil",
+    "imbecil",
+    "pendejo",
+    "estúpido",
+    "estupido",
+    "cabrón",
+    "cabron",
+    "puta",
+    "mierda",
+    "pinche",
+    "pinches",
+    "chingada",
+    "chingar",
+    "verga",
+    "culero",
+    "jodido"
+}
+TOXICITY_THRESHOLD = 0.40
 
 
 @lru_cache
@@ -28,6 +47,26 @@ class DetectToxicity:
 
     def execute(self, text: str) -> tuple[float, bool]:
         scores = _get_pipeline()(text, truncation=True)[0]
-        print(scores)
+
         toxicity_score = round(max(s["score"] for s in scores), 4)
-        return toxicity_score, toxicity_score >= TOXICITY_THRESHOLD
+
+        is_toxic = toxicity_score >= TOXICITY_THRESHOLD
+
+        text_lower = text.lower()
+
+        contains_bad_word = any(
+            word in text_lower
+            for word in BAD_WORDS
+        )
+
+        if contains_bad_word:
+            is_toxic = True
+            
+        print({
+            "toxicity_score": toxicity_score,
+            "contains_bad_word": contains_bad_word,
+            "is_toxic": is_toxic,
+            "text": text,
+        })
+
+        return toxicity_score, is_toxic
