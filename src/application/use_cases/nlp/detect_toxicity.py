@@ -1,43 +1,97 @@
 from functools import lru_cache
+
+import re
+
 import torch
 from transformers import pipeline
 
-HATE_MODEL = "pysentimiento/robertuito-hate-speech"
-SENTIMENT_MODEL = "pysentimiento/robertuito-sentiment-analysis"
+TOXICITY_MODEL_NAME = "pysentimiento/robertuito-hate-speech"
+BAD_WORDS = {
+    # Lista previa
+    "idiota", "tonto", "tonta", "imbécil", "imbecil", "pendejo", "pendeja", "estúpido", "estupido",
+    "cabrón", "cabron", "puta", "mierda", "pinche", "pinches", "chingada", 
+    "chingar", "verga", "culero", "culera", "jodido", "jodida",
+
+    # Insultos generales y obscenidades comunes
+    "bastardo", "bastarda", "perra", "zorra", "carajo", "cagar", "cagada", 
+    "cagón", "cagon", "cagona", "mamada", "mamón", "mamon", "mamona", 
+    "baboso", "babosa", "tarado", "tarada", "mierdoso", "mierdosa",
+
+    # México y Centroamérica
+    "chingadera", "ojete", "putazo", "encabronar", "desmadre", "mamar",
+
+    # Argentina / Uruguay
+    "boludo", "boluda", "pelotudo", "pelotuda", "concha", "conchudo", 
+    "conchuda", "sorete", "forro", "forra", "pajero", "pajera",
+
+    # España
+    "gilipollas", "capullo", "capulla", "hostia", "ostia", "joder", "coño", "cono",
+
+    # Colombia / Venezuela / Caribe
+    "hijueputa", "hdp", "hp", "malparido", "malparida", "gonorrea", 
+    "huevón", "huevon", "huevona", "mamawebo", "mamaguevo",
+
+    # Chile
+    "weón", "weon", "weona", "aweonao", "conchesumadre", "ctm"
+}
+TOXICITY_THRESHOLD = 0.40
 
 
 @lru_cache
-def _get_hate_pipeline():
-    return pipeline("text-classification", model=HATE_MODEL, top_k=None, torch_dtype=torch.float16)
-
-
-@lru_cache
-def _get_sentiment_pipeline():
-    return pipeline("text-classification", model=SENTIMENT_MODEL, top_k=None, torch_dtype=torch.float16)
-
-
-# Alias y helper a NIVEL DE MÓDULO (fuera de la clase)
-_get_pipeline = _get_hate_pipeline
-
-
-def warmup_pipelines():
-    _get_hate_pipeline()
-    _get_sentiment_pipeline()
+def _get_pipeline():
+    return pipeline(
+        "text-classification",
+        model=TOXICITY_MODEL_NAME,
+        top_k=None,
+        torch_dtype=torch.float16,
+    )
 
 
 class DetectToxicity:
+    """
+    Use case: detecta discurso de odio/agresividad en un texto en
+    español, usado para filtrar comentarios y posts de la comunidad.
+    Responsabilidad única: toxicidad. El modelo es multi-etiqueta
+    (hateful, aggressive, targeted); se usa el score máximo entre las
+    tres como toxicity_score.
+    """
+
     def execute(self, text: str) -> tuple[float, bool]:
-        # 1. Evaluar Odio/Agresividad
-        hate_scores = _get_hate_pipeline()(text, truncation=True)[0]
-        hate_score = max(
-            s["score"] for s in hate_scores if s["label"].lower() in ["hateful", "aggressive", "targeted"]
+        scores = _get_pipeline()(text, truncation=True)[0]
+        print(scores)
+
+        toxicity_score = round(
+            max(
+                s["score"] 
+                for s in scores 
+                if s["label"].lower() in ["hateful", "aggressive", "targeted"]
+            ),
+            4
         )
 
-        # 2. Evaluar Sentimiento
-        sentiment_scores = _get_sentiment_pipeline()(text, truncation=True)[0]
-        neg_score = next(s["score"] for s in sentiment_scores if s["label"].upper() == "NEG")
+        is_toxic = toxicity_score >= TOXICITY_THRESHOLD
 
-        # Es tóxico si el modelo de odio salta (>= 0.40) O si el sentimiento es fuertemente negativo (>= 0.85)
-        is_toxic = (hate_score >= 0.40) or (neg_score >= 0.85)
+        text_lower = text.lower()
 
-        return max(hate_score, neg_score), is_toxic
+        contains_bad_word = any(
+            re.search(rf"\b{word}\b", text_lower)
+            for word in BAD_WORDS
+        )
+
+        if contains_bad_word:
+            is_toxic = True
+
+        elif toxicity_score >= TOXICITY_THRESHOLD:
+            is_toxic = True
+
+        else:
+            is_toxic = False
+            
+        print({
+            "toxicity_score": toxicity_score,
+            "contains_bad_word": contains_bad_word,
+            "is_toxic": is_toxic,
+            "text": text,
+        })
+
+        return toxicity_score, is_toxic

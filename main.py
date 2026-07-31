@@ -18,25 +18,30 @@ from src.infrastructure.routes import (
     nlp_routes,
     training_routes,
 )
-
-# Alias claros para evitar colisión de nombres
-from src.application.use_cases.nlp.analyze_sentiment import _get_pipeline as _get_analyze_sentiment_pipeline
-from src.application.use_cases.nlp.detect_toxicity import (
-    _get_hate_pipeline as _get_toxicity_hate_pipeline,
-    _get_sentiment_pipeline as _get_toxicity_sentiment_pipeline,
-)
+from src.application.use_cases.nlp.analyze_sentiment import _get_pipeline as _get_sentiment_pipeline
+from src.application.use_cases.nlp.detect_toxicity import _get_pipeline as _get_toxicity_pipeline
 from src.application.use_cases.nlp.detect_entities import _get_nlp as _get_spacy_nlp
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Precarga de modelos pesados (transformers + spaCy) ANTES de aceptar
+    # tráfico. Sin esto, la primera petición real a /nlp/analyze paga el
+    # costo de descargar/cargar los modelos y puede exceder el timeout del
+    # cliente o hacer que el contenedor supere su límite de memoria justo
+    # cuando ya está bajo carga.
     print("Precargando modelos de NLP (sentimiento, toxicidad, spaCy)...")
-    _get_analyze_sentiment_pipeline()
-    _get_toxicity_hate_pipeline()
-    _get_toxicity_sentiment_pipeline()
+    _get_sentiment_pipeline()
+    _get_toxicity_pipeline()
     _get_spacy_nlp()
     print("Modelos de NLP listos.")
 
+    # En background, no "await" directo: si RabbitMQ no responde (URL mal
+    # puesta, broker caído), esto no debe tumbar el health check ni los
+    # endpoints de NLP/ML por HTTP, que no dependen de RabbitMQ para nada.
+    # Antes, un RABBITMQ_URL incorrecto colgaba el lifespan para siempre
+    # (connect_robust reintenta sin límite) y Railway reiniciaba el
+    # contenedor en loop infinito sin ningún error visible.
     consumer = RabbitMQConsumer(get_process_content_event(), get_process_user_event())
     consumer_task = asyncio.create_task(consumer.start())
 
